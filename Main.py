@@ -35,6 +35,8 @@ class ImageViewer(QGraphicsView):
         self.delete_figure_mode = False
         self.xFigures: List[XFigure] = []
         self.active_figure: XFigure = None
+        self.selected_figure: XFigure = None
+        self.selected_point: XPoint = None
         self.temp_line = None
         self.temporary_point = None
         self.space_pressed = False
@@ -51,116 +53,32 @@ class ImageViewer(QGraphicsView):
             QMessageBox.warning(self, "Ошибка загрузки", "Не удалось загрузить изображение.")
 
     def mousePressEvent(self, event):
-
         super(ImageViewer, self).mousePressEvent(event)
-        print(self.select_figure_mode)
+        scenePos = self.mapToScene(event.pos())
+
         if self.adding_figure_mode and event.button() == Qt.LeftButton:
-            scenePos = self.mapToScene(event.pos())
             self.statusbar.showMessage(f"Клик мыши в координатах: ({scenePos.x():.2f}, {scenePos.y():.2f})")
             self.temporary_point = (scenePos.x(), scenePos.y())
             self.drawPoint(*self.temporary_point)
-        if self.select_figure_mode and event.button() == Qt.LeftButton:
-            self.reset_selection_figures()
+            # self.drawLine()
+        elif self.select_figure_mode and event.button() == Qt.LeftButton:
             self.statusbar.showMessage(f'Переход в режим select_figure с координатами ')
-            scenePos = self.mapToScene(event.pos())
             self.select_figure(scenePos.x(), scenePos.y())
-        if self.edit_figure_mode and event.button() == Qt.LeftButton:
+            self.selected_point = self.select_point(scenePos.x(), scenePos.y())
+            if self.selected_figure:
+                self.change_color_for_figure(self.selected_figure)
+            if self.selected_point:
+                self.change_color_for_point(self.selected_point, QColor(0,0,255))
+
+        elif self.edit_figure_mode and event.button() == Qt.LeftButton:
             pass
-        if self.delete_figure_mode and event.button() == Qt.LeftButton:
+        elif self.delete_figure_mode and event.button() == Qt.LeftButton:
             pass
 
         if event.button() == Qt.MidButton:
             self.mid_button_press = True
             self.last_pan_point = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
-
-    def select_figure(self, x, y):
-        self.statusbar.showMessage(f'Переход в метод select_figure с координатами x{x} y{y}')
-        # self.reset_selection_figures()
-        selected_figure = None
-        for figure in self.xFigures:
-            for point in figure.points:
-                # Проверяем, попадает ли точка (x, y) в радиус точки фигуры
-                if (point.main_x - x) ** 2 + (point.main_y - y) ** 2 <= self.base_radius ** 2:
-                    selected_figure = figure
-                    break
-            if selected_figure:
-                break
-
-        if selected_figure:
-            # Меняем цвет фигуры
-            self.change_color_for_figure(selected_figure)
-            pass
-
-    def reset_selection_figures(self):
-        print('001')
-        self.clearLines()
-        # Удаляем только элементы точек
-        for item in self.point_items:
-            self.scene.removeItem(item)
-
-        for figure in self.xFigures:
-            prev_point = None
-            for point in figure.points:
-                if prev_point:
-                    self.drawLine(prev_point, point)
-                prev_point = point
-
-    def clearLines(self):
-        print('011')
-        for item in self.scene.items():
-            if isinstance(item, QGraphicsPathItem):
-                self.scene.removeItem(item)
-        # self.scene.removeItem()
-        # for item in self.scene.removeItem():
-        #     print(000)
-        #     if isinstance(item, QGraphicsLineItem):
-        #         print(111)
-        #         self.scene.removeItem(item)
-
-
-    def change_color_for_figure(self, figure: XFigure):
-        for point in figure.points:
-            self.drawPoint(point.main_x, point.main_y, QColor(0, 255, 0), 2)
-            self.drawLinesByFigure(figure)
-
-
-    def drawPoint(self, x, y, color: QColor = QColor(255, 0, 0), addition_radius_part: int = 0):
-        """Отрисовывает точку на заданных координатах с учетом масштабирования."""
-        # Рассчитываем фактический размер точки с учетом текущего масштаба
-        radius = (self.base_radius + addition_radius_part) / self.scale_factor
-        # Создаем эллипс с новым размером
-        ellipse = QGraphicsEllipseItem(x - radius, y - radius, 2 * radius, 2 * radius)
-        ellipse.setBrush(QBrush(color))  # Заливка красным цветом
-        # Убираем обводку, устанавливая прозрачный цвет для пера
-        ellipse.setPen(QPen(QColor(0, 0, 0, 0)))  # QColor(0, 0, 0, 0) - это прозрачный цвет
-        self.point_items.append(ellipse)
-        self.scene.addItem(ellipse)
-
-    def drawBezierCurve(self, startPoint, endPoint, controlPoint1, controlPoint2, addition_width_part=0):
-        path = QPainterPath()
-        path.moveTo(startPoint)
-        path.cubicTo(controlPoint1, controlPoint2, endPoint)
-
-        pen = QPen(Qt.black, 2 + addition_width_part)  # Черное перо толщиной 2
-        self.scene.addPath(path, pen)
-
-    def drawLine(self, start_point: XPoint, end_point: XPoint, width: int = 1, color:QColor=QColor(0, 0, 0)):
-        path = QPainterPath()
-        path.moveTo(start_point.main_x, start_point.main_y)
-        path.lineTo(end_point.main_x, end_point.main_y)
-
-        pen = QPen()  # Настроить перо по желанию
-        pen.setWidth(width)
-        pen.setColor(color)
-        self.scene.addPath(path, pen)
-
-    def drawLinesByFigure(self, figure:XFigure, color: QColor = QColor(255, 0, 0)):
-        prev_point = None
-        for point in figure.points:
-            if prev_point:
-                self.drawLine(prev_point, point,2,color)
-            prev_point = point
 
     def mouseMoveEvent(self, event):
         super(ImageViewer, self).mouseMoveEvent(event)
@@ -185,6 +103,10 @@ class ImageViewer(QGraphicsView):
             path.moveTo(last_point.main_x, last_point.main_y)
             path.lineTo(current_pos.x(), current_pos.y())
             self.temp_line = self.scene.addPath(path, QPen(Qt.red, 1, Qt.DashLine))
+        elif self.select_figure_mode and self.selected_figure:
+            print('wwwwwwwww')
+            self.statusbar.showMessage(f'Переход в режим select_figure с координатами 111')
+
         if self.last_pan_point and self.mid_button_press:
             delta = event.pos() - self.last_pan_point
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
@@ -214,11 +136,121 @@ class ImageViewer(QGraphicsView):
                 self.scene.removeItem(self.temp_line)
                 self.temp_line = None
 
+        elif self.select_figure_mode and event.button() == Qt.LeftButton:
+            pass
+            # self.statusbar.showMessage(f'Переход в режим select_figure с координатами ')
+            # self.reset_selection_figures()
+            # scenePos = self.mapToScene(event.pos())
+            # # self.select_figure(scenePos.x(), scenePos.y())
+            # if self.selected_figure:
+            #     self.change_color_for_figure(self.selected_figure)
+
         elif event.button() == Qt.MidButton:
             self.last_pan_point = None
             self.setCursor(Qt.ArrowCursor)
             self.mid_button_press = False
-        self.redrawPoints()
+        # self.redrawPoints()
+
+    def select_point(self, x, y):
+        self.statusbar.showMessage(f'Переход в метод select_point с координатами x{x} y{y}')
+        if self.selected_figure:
+            return self.check_point_in_figure(x, y, self.selected_figure)
+            # for point in self.selected_figure.points:
+            #     # Проверяем, попадает ли точка (x, y) в радиус точки фигуры
+            #     if (point.main_x - x) ** 2 + (point.main_y - y) ** 2 <= self.base_radius ** 2:
+            #         self.selected_point = point
+            #         break
+
+    def select_figure(self, x, y):
+        self.statusbar.showMessage(f'Переход в метод select_figure с координатами x{x} y{y}')
+        # self.reset_selection_figures()
+        self.selected_figure = None
+        for figure in self.xFigures:
+            # for point in figure.points:
+            #     # Проверяем, попадает ли точка (x, y) в радиус точки фигуры
+            #     if (point.main_x - x) ** 2 + (point.main_y - y) ** 2 <= self.base_radius ** 2:
+            #         self.selected_figure = figure
+            #         break
+            if self.check_point_in_figure(x, y, figure):
+                self.selected_figure = figure
+                break
+
+    def check_point_in_figure(self, x, y, figure: XFigure):
+        for point in figure.points:
+            # Проверяем, попадает ли точка (x, y) в радиус точки фигуры
+            if (point.main_x - x) ** 2 + (point.main_y - y) ** 2 <= self.base_radius ** 2:
+                return point
+
+    def reset_selection_figures(self):
+        print('001')
+        self.clearLines()
+        # Удаляем только элементы точек
+        for item in self.point_items:
+            self.scene.removeItem(item)
+
+        for figure in self.xFigures:
+            prev_point = None
+            for point in figure.points:
+                if prev_point:
+                    self.drawLine(prev_point, point)
+                prev_point = point
+
+    def clearLines(self):
+        print('011')
+        for item in self.scene.items():
+            if isinstance(item, QGraphicsPathItem):
+                self.scene.removeItem(item)
+        # self.scene.removeItem()
+        # for item in self.scene.removeItem():
+        #     print(000)
+        #     if isinstance(item, QGraphicsLineItem):
+        #         print(111)
+        #         self.scene.removeItem(item)
+
+    def change_color_for_point(self, point: XPoint, color: QColor = QColor(0, 255, 0)):
+        self.drawPoint(point.main_x, point.main_y, color, 2)
+
+    def change_color_for_figure(self, figure: XFigure):
+        for point in figure.points:
+            self.drawPoint(point.main_x, point.main_y, QColor(0, 255, 0), 2)
+            self.drawLinesByFigure(figure)
+
+    def drawPoint(self, x, y, color: QColor = QColor(255, 0, 0), addition_radius_part: int = 0):
+        """Отрисовывает точку на заданных координатах с учетом масштабирования."""
+        # Рассчитываем фактический размер точки с учетом текущего масштаба
+        radius = (self.base_radius + addition_radius_part) / self.scale_factor
+        # Создаем эллипс с новым размером
+        ellipse = QGraphicsEllipseItem(x - radius, y - radius, 2 * radius, 2 * radius)
+        ellipse.setBrush(QBrush(color))  # Заливка красным цветом
+        # Убираем обводку, устанавливая прозрачный цвет для пера
+        ellipse.setPen(QPen(QColor(0, 0, 0, 0)))  # QColor(0, 0, 0, 0) - это прозрачный цвет
+        self.point_items.append(ellipse)
+        self.scene.addItem(ellipse)
+
+    def drawBezierCurve(self, startPoint, endPoint, controlPoint1, controlPoint2, addition_width_part=0):
+        path = QPainterPath()
+        path.moveTo(startPoint)
+        path.cubicTo(controlPoint1, controlPoint2, endPoint)
+
+        pen = QPen(Qt.black, 2 + addition_width_part)  # Черное перо толщиной 2
+        self.scene.addPath(path, pen)
+
+    def drawLine(self, start_point: XPoint, end_point: XPoint, width: int = 1, color: QColor = QColor(0, 0, 0)):
+        path = QPainterPath()
+        path.moveTo(start_point.main_x, start_point.main_y)
+        path.lineTo(end_point.main_x, end_point.main_y)
+
+        pen = QPen()  # Настроить перо по желанию
+        pen.setWidth(width)
+        pen.setColor(color)
+        self.scene.addPath(path, pen)
+
+    def drawLinesByFigure(self, figure: XFigure, color: QColor = QColor(255, 0, 0)):
+        prev_point = None
+        for point in figure.points:
+            if prev_point:
+                self.drawLine(prev_point, point, 2, color)
+            prev_point = point
 
     def redrawPoints(self):
         # Удаляем только элементы точек
