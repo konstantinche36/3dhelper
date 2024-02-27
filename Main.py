@@ -2,10 +2,16 @@ from typing import List
 
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QPushButton, QVBoxLayout, QWidget, QGraphicsView,
                              QGraphicsScene, QGraphicsPixmapItem, QFileDialog, QStatusBar, QMessageBox,
-                             QGraphicsEllipseItem, QHBoxLayout, QCheckBox, QRadioButton, QButtonGroup)
-from PyQt5.QtGui import QPixmap, QPainter, QBrush, QColor, QPen
+                             QGraphicsEllipseItem, QHBoxLayout, QCheckBox, QRadioButton, QButtonGroup,
+                             QGraphicsLineItem, QGraphicsPathItem)
+from PyQt5.QtGui import QPixmap, QPainter, QBrush, QColor, QPen, QPainterPath
 from PyQt5.QtCore import Qt, QPoint, QRectF
 import sys
+
+from XFigure import XFigure
+
+from Utils import generate_unique_name
+from XPoint import XPoint
 
 
 class ImageViewer(QGraphicsView):
@@ -20,15 +26,20 @@ class ImageViewer(QGraphicsView):
         self.statusbar = statusbar  # Сохраняем ссылку на статусную строку для вывода сообщений
         self.scale_factor = 1.0  # Инициализируем коэффициент масштабирования
         self.last_pan_point = None  # Инициализируем переменную для последней точки панорамирования
-        self.figures = []  # Создаем пустой список для хранения фигур 
-        # self.points: List[CPoint] = []  # Список для хранения координат точек
+        # self.figures = []  # Создаем пустой список для хранения фигур
         self.points = []  # Список для хранения координат точек
         self.point_items: List[QGraphicsEllipseItem] = []  # Список point-ов, экземпляр класса QGraphicsEllipseItem
         self.adding_figure_mode = False  # Добавляем новый атрибут для режима добавления фигур
-        self.edit_figure_radio = False  # Добавляем новый атрибут для режима добавления фигур
-        self.select_figure_radio = False  # Добавляем новый атрибут для режима добавления фигур
-        self.delete_figure_radio = False  # Добавляем новый атрибут для режима добавления фигур
-        # self.drawing_enabled = False
+        self.select_figure_mode = False
+        self.edit_figure_mode = False
+        self.delete_figure_mode = False
+        self.xFigures: List[XFigure] = []
+        self.active_figure: XFigure = None
+        self.temp_line = None
+        self.temporary_point = None
+        self.space_pressed = False
+        self.mid_button_press = False  # Необходима, чтобы во добавления фигуры можно было пользоваться центральной кнопкой мыши
+        self.base_radius = 5  # Базовый размер точки без масштабирования
 
     def set_image(self, image_path):
         pixmap = QPixmap(image_path)
@@ -40,57 +51,184 @@ class ImageViewer(QGraphicsView):
             QMessageBox.warning(self, "Ошибка загрузки", "Не удалось загрузить изображение.")
 
     def mousePressEvent(self, event):
+
         super(ImageViewer, self).mousePressEvent(event)
-        # if self.adding_figure_mode and event.button() == Qt.LeftButton:  # Проверяем, включен ли режим добавления фигур
-        super(ImageViewer, self).mousePressEvent(event)
+        print(self.select_figure_mode)
         if self.adding_figure_mode and event.button() == Qt.LeftButton:
             scenePos = self.mapToScene(event.pos())
             self.statusbar.showMessage(f"Клик мыши в координатах: ({scenePos.x():.2f}, {scenePos.y():.2f})")
-            self.points.append((scenePos.x(), scenePos.y()))
-            self.drawPoint(scenePos.x(), scenePos.y())
-        elif event.button() == Qt.MidButton:
+            self.temporary_point = (scenePos.x(), scenePos.y())
+            self.drawPoint(*self.temporary_point)
+        if self.select_figure_mode and event.button() == Qt.LeftButton:
+            self.reset_selection_figures()
+            self.statusbar.showMessage(f'Переход в режим select_figure с координатами ')
+            scenePos = self.mapToScene(event.pos())
+            self.select_figure(scenePos.x(), scenePos.y())
+        if self.edit_figure_mode and event.button() == Qt.LeftButton:
+            pass
+        if self.delete_figure_mode and event.button() == Qt.LeftButton:
+            pass
+
+        if event.button() == Qt.MidButton:
+            self.mid_button_press = True
             self.last_pan_point = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
 
-    def drawPoint(self, x, y):
+    def select_figure(self, x, y):
+        self.statusbar.showMessage(f'Переход в метод select_figure с координатами x{x} y{y}')
+        # self.reset_selection_figures()
+        selected_figure = None
+        for figure in self.xFigures:
+            for point in figure.points:
+                # Проверяем, попадает ли точка (x, y) в радиус точки фигуры
+                if (point.main_x - x) ** 2 + (point.main_y - y) ** 2 <= self.base_radius ** 2:
+                    selected_figure = figure
+                    break
+            if selected_figure:
+                break
+
+        if selected_figure:
+            # Меняем цвет фигуры
+            self.change_color_for_figure(selected_figure)
+            pass
+
+    def reset_selection_figures(self):
+        print('001')
+        self.clearLines()
+        # Удаляем только элементы точек
+        for item in self.point_items:
+            self.scene.removeItem(item)
+
+        for figure in self.xFigures:
+            prev_point = None
+            for point in figure.points:
+                if prev_point:
+                    self.drawLine(prev_point, point)
+                prev_point = point
+
+    def clearLines(self):
+        print('011')
+        for item in self.scene.items():
+            if isinstance(item, QGraphicsPathItem):
+                self.scene.removeItem(item)
+        # self.scene.removeItem()
+        # for item in self.scene.removeItem():
+        #     print(000)
+        #     if isinstance(item, QGraphicsLineItem):
+        #         print(111)
+        #         self.scene.removeItem(item)
+
+
+    def change_color_for_figure(self, figure: XFigure):
+        for point in figure.points:
+            self.drawPoint(point.main_x, point.main_y, QColor(0, 255, 0), 2)
+            self.drawLinesByFigure(figure)
+
+
+    def drawPoint(self, x, y, color: QColor = QColor(255, 0, 0), addition_radius_part: int = 0):
         """Отрисовывает точку на заданных координатах с учетом масштабирования."""
-        base_radius = 5  # Базовый размер точки без масштабирования
         # Рассчитываем фактический размер точки с учетом текущего масштаба
-        radius = base_radius / self.scale_factor
+        radius = (self.base_radius + addition_radius_part) / self.scale_factor
         # Создаем эллипс с новым размером
         ellipse = QGraphicsEllipseItem(x - radius, y - radius, 2 * radius, 2 * radius)
-        ellipse.setBrush(QBrush(QColor(255, 0, 0)))  # Заливка красным цветом
+        ellipse.setBrush(QBrush(color))  # Заливка красным цветом
         # Убираем обводку, устанавливая прозрачный цвет для пера
         ellipse.setPen(QPen(QColor(0, 0, 0, 0)))  # QColor(0, 0, 0, 0) - это прозрачный цвет
         self.point_items.append(ellipse)
         self.scene.addItem(ellipse)
 
+    def drawBezierCurve(self, startPoint, endPoint, controlPoint1, controlPoint2, addition_width_part=0):
+        path = QPainterPath()
+        path.moveTo(startPoint)
+        path.cubicTo(controlPoint1, controlPoint2, endPoint)
+
+        pen = QPen(Qt.black, 2 + addition_width_part)  # Черное перо толщиной 2
+        self.scene.addPath(path, pen)
+
+    def drawLine(self, start_point: XPoint, end_point: XPoint, width: int = 1, color:QColor=QColor(0, 0, 0)):
+        path = QPainterPath()
+        path.moveTo(start_point.main_x, start_point.main_y)
+        path.lineTo(end_point.main_x, end_point.main_y)
+
+        pen = QPen()  # Настроить перо по желанию
+        pen.setWidth(width)
+        pen.setColor(color)
+        self.scene.addPath(path, pen)
+
+    def drawLinesByFigure(self, figure:XFigure, color: QColor = QColor(255, 0, 0)):
+        prev_point = None
+        for point in figure.points:
+            if prev_point:
+                self.drawLine(prev_point, point,2,color)
+            prev_point = point
+
     def mouseMoveEvent(self, event):
-        if self.last_pan_point is not None:
+        super(ImageViewer, self).mouseMoveEvent(event)
+        if self.temporary_point is not None:
+            self.temporary_point = None
+            self.redrawPoints()
+
+        if self.adding_figure_mode and self.active_figure and len(
+                self.active_figure.points) > 0 and not self.mid_button_press:
+            # Удалить предыдущую временную линию, если она есть
+            if hasattr(self, 'temp_line') and self.temp_line:
+                self.scene.removeItem(self.temp_line)
+                self.temp_line = None
+
+            # Получить последнюю точку
+            last_point = self.active_figure.points[-1]
+            # Текущее положение курсора
+            current_pos = self.mapToScene(event.pos())
+
+            # Создать временную линию
+            path = QPainterPath()
+            path.moveTo(last_point.main_x, last_point.main_y)
+            path.lineTo(current_pos.x(), current_pos.y())
+            self.temp_line = self.scene.addPath(path, QPen(Qt.red, 1, Qt.DashLine))
+        if self.last_pan_point and self.mid_button_press:
             delta = event.pos() - self.last_pan_point
             self.horizontalScrollBar().setValue(self.horizontalScrollBar().value() - delta.x())
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             self.last_pan_point = event.pos()
-        else:
-            super(ImageViewer, self).mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
-        if event.button() == Qt.MidButton:
+        super(ImageViewer, self).mouseReleaseEvent(event)
+        if self.adding_figure_mode and event.button() == Qt.LeftButton:
+            scenePos = self.mapToScene(event.pos())
+            if not self.active_figure:
+                self.active_figure = XFigure(generate_unique_name())
+                self.xFigures.append(self.active_figure)
+
+            new_point = XPoint(scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y(), scenePos.x(), scenePos.y())
+            self.active_figure.add_point(new_point)
+
+            # Если это не первая точка, рисуем линию от предыдущей точки к новой
+            if len(self.active_figure.points) > 1:
+                prev_point = self.active_figure.points[-2]
+                self.drawLine(prev_point, new_point)
+
+            self.drawPoint(scenePos.x(), scenePos.y())
+
+            # Удаляем временную линию, если она была нарисована
+            if self.temp_line:
+                self.scene.removeItem(self.temp_line)
+                self.temp_line = None
+
+        elif event.button() == Qt.MidButton:
             self.last_pan_point = None
             self.setCursor(Qt.ArrowCursor)
-        else:
-            super(ImageViewer, self).mouseReleaseEvent(event)
+            self.mid_button_press = False
+        self.redrawPoints()
 
     def redrawPoints(self):
         # Удаляем только элементы точек
         for item in self.point_items:
-            print(f'del {item}')
             self.scene.removeItem(item)
         self.point_items.clear()  # Очищаем список ссылок на элементы точек
-
         # Перерисовываем точки
-        for point in self.points:
-            self.drawPoint(*point)
+        for figure in self.xFigures:
+            for point in figure.points:
+                self.drawPoint(point.main_x, point.main_y)
 
     def wheelEvent(self, event):
         """Обрабатывает события прокрутки колесика мыши для масштабирования."""
@@ -232,6 +370,9 @@ class MainApplication(QMainWindow):
 
         # Связываем события переключения радиокнопок с методами
         self.add_figure_radio.toggled.connect(self.toggle_drawing_mode)
+        self.edit_figure_radio.toggled.connect(self.toggle_edit_mode)
+        self.select_figure_radio.toggled.connect(self.toggle_select_mode)
+        self.delete_figure_radio.toggled.connect(self.toggle_delete_mode)
         # Для остальных радиокнопок аналогично связать с методами
 
         button_layout.addStretch()
@@ -254,10 +395,42 @@ class MainApplication(QMainWindow):
     def toggle_drawing_mode(self, checked):
         # Этот метод вызывается, когда состояние радиокнопки "Добавить фигуру" изменяется
         self.image_viewer.adding_figure_mode = checked
+        self.image_viewer.active_figure = None
         if checked:
             print("Режим добавления фигур включен")
+            self.statusbar.showMessage("Режим добавления фигур включен")
         else:
             print("Режим добавления фигур выключен")
+
+    def toggle_edit_mode(self, checked):
+        # Этот метод вызывается, когда состояние радиокнопки "Добавить фигуру" изменяется
+        self.image_viewer.edit_figure_mode = checked
+        self.image_viewer.active_figure = None
+        if checked:
+            print("Режим редактирования фигур включен")
+            self.statusbar.showMessage("Режим редактирования фигур включен")
+        else:
+            print("Режим редактирования фигур выключен")
+
+    def toggle_select_mode(self, checked):
+        # Этот метод вызывается, когда состояние радиокнопки "Добавить фигуру" изменяется
+        self.image_viewer.select_figure_mode = checked
+        self.image_viewer.active_figure = None
+        if checked:
+            print("Режим выделения фигур включен")
+            self.statusbar.showMessage("Режим выделения фигур включен")
+        else:
+            print("Режим выделения фигур выключен")
+
+    def toggle_delete_mode(self, checked):
+        # Этот метод вызывается, когда состояние радиокнопки "Добавить фигуру" изменяется
+        self.image_viewer.delete_figure_mode = checked
+        self.image_viewer.active_figure = None
+        if checked:
+            print("Режим удаления фигур включен")
+            self.statusbar.showMessage("Режим удаления фигур включен")
+        else:
+            print("Режим удаления фигур выключен")
 
 
 app = QApplication(sys.argv)

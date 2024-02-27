@@ -1,7 +1,7 @@
 class XPoint:
     def __init__(self, main_x, main_y, ctrl1_x, ctrl1_y, ctrl2_x, ctrl2_y):
-        self._main_x = main_x
-        self._main_y = main_y
+        self.x = main_x
+        self.y = main_y
         self._ctrl1_x = ctrl1_x
         self._ctrl1_y = ctrl1_y
         self._ctrl2_x = ctrl2_x
@@ -9,19 +9,19 @@ class XPoint:
 
     @property
     def main_x(self):
-        return self._main_x
+        return self.x
 
     @main_x.setter
     def main_x(self, value):
-        self._main_x = value
+        self.x = value
 
     @property
     def main_y(self):
-        return self._main_y
+        return self.y
 
     @main_y.setter
     def main_y(self, value):
-        self._main_y = value
+        self.y = value
 
     @property
     def ctrl1_x(self):
@@ -56,14 +56,15 @@ class XPoint:
         self._ctrl2_y = value
 
     def unique_identifier(self):
-        return hash((self._main_x, self._main_y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y))
+        return hash((self.x, self.y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y))
 
-
+    def __str__(self):
+        return f"XPoint(main=({self.x}, {self.y}), ctrl1=({self._ctrl1_x}, {self._ctrl1_y}), ctrl2=({self._ctrl2_x}, {self._ctrl2_y}))"
 
     def __eq__(self, other):
-        return (self._main_x, self._main_y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y) == \
-               (other._main_x, other._main_y, other._ctrl1_x, other._ctrl1_y, other._ctrl2_x, other._ctrl2_y)
+        return (self.x, self.y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y) == \
+               (other.x, other.y, other._ctrl1_x, other._ctrl1_y, other._ctrl2_x, other._ctrl2_y)
 
     def __hash__(self):
-        return hash((self._main_x, self._main_y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y))
+        return hash((self.x, self.y, self._ctrl1_x, self._ctrl1_y, self._ctrl2_x, self._ctrl2_y))
 
