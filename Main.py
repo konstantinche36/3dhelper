@@ -60,7 +60,6 @@ class ImageViewer(QGraphicsView):
             self.statusbar.showMessage(f"Клик мыши в координатах: ({scenePos.x():.2f}, {scenePos.y():.2f})")
             self.temporary_point = (scenePos.x(), scenePos.y())
             self.drawPoint(*self.temporary_point)
-            # self.drawLine()
         elif self.select_figure_mode and event.button() == Qt.LeftButton:
             self.statusbar.showMessage(f'Переход в режим select_figure с координатами ')
             self.select_figure(scenePos.x(), scenePos.y())
@@ -80,7 +79,7 @@ class ImageViewer(QGraphicsView):
             self.last_pan_point = event.pos()
             self.setCursor(Qt.ClosedHandCursor)
 
-    def mouseMoveEvent(self, event):
+    def mouseMoveEvent22(self, event):
         super(ImageViewer, self).mouseMoveEvent(event)
         if self.temporary_point is not None:
             self.temporary_point = None
@@ -113,7 +112,7 @@ class ImageViewer(QGraphicsView):
             self.verticalScrollBar().setValue(self.verticalScrollBar().value() - delta.y())
             self.last_pan_point = event.pos()
 
-    def mouseReleaseEvent(self, event):
+    def mouseReleaseEvent22(self, event):
         super(ImageViewer, self).mouseReleaseEvent(event)
         if self.adding_figure_mode and event.button() == Qt.LeftButton:
             scenePos = self.mapToScene(event.pos())
